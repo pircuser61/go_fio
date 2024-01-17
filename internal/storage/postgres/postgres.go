@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"log/slog"
 
 	//"github.com/georgysavva/scany/pgxscan"
 	//"github.com/jackc/pgx/v4"
@@ -12,33 +13,38 @@ import (
 	"github.com/pircuser61/go_fio/internal/storage"
 )
 
-type PostgressStore struct {
+type PostgresStore struct {
 	pool *pgxpool.Pool
+	log  *slog.Logger
 }
 
-func GetStore() storage.Store {
-	var x storage.Store
+func GetStore(loggerInstance *slog.Logger) storage.Store {
+	x := PostgresStore{log: loggerInstance}
 	return x
 }
 
-func (_ PostgressStore) PersonCreate(ctx context.Context, _ models.Person) (int, error) {
+func (PostgresStore) Release() {}
+
+func (PostgresStore) PersonCreate(ctx context.Context, _ models.Person) (uint32, error) {
 	return 0, nil
 }
 
-func (_ PostgressStore) PersonGet(ctx context.Context, id int32) (models.Person, error) {
+func (i PostgresStore) PersonGet(ctx context.Context, id uint32) (models.Person, error) {
+	i.log.Debug("postgres: get person", slog.Uint64("id", uint64(id)))
 	var person models.Person
 	return person, nil
 }
 
-func (_ PostgressStore) PersonUpdate(ctx context.Context, _ models.Person) error {
+func (PostgresStore) PersonUpdate(ctx context.Context, _ models.Person) error {
 	return nil
 }
 
-func (_ PostgressStore) PersonDelete(ctx context.Context, id int32) error {
+func (PostgresStore) PersonDelete(ctx context.Context, id uint32) error {
 	return nil
 }
 
-func (_ PostgressStore) PersonList(ctx context.Context) ([]*models.Person, error) {
+func (i PostgresStore) PersonList(ctx context.Context) ([]*models.Person, error) {
+	i.log.Debug("postgres: get person list")
 	var list []*models.Person
 	return list, nil
 }

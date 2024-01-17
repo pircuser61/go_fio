@@ -5,6 +5,6 @@ type Person struct {
 	Surname     string
 	Patronymic  string
 	Age         int
-	Gender      int
+	Gender      string
 	Nationality string
 }
