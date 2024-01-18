@@ -20,7 +20,12 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	apiInstance := api.GetApi(logger)
-	dbInstance := store.GetStore(logger)
+	dbInstance, err := store.GetStore(ctx, logger)
+	if err != nil {
+		logger.Error(err.Error())
+		return
+	}
+	defer dbInstance.Release()
 	services.SetApp(apiInstance, dbInstance, logger)
 	rest.RunHttpServer(ctx, logger)
 }

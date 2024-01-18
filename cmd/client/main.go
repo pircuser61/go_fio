@@ -10,18 +10,26 @@ import (
 	"strings"
 
 	config "github.com/pircuser61/go_fio/config"
+	"github.com/pircuser61/go_fio/internal/models"
 )
+
+type ReqPerson struct {
+	Name       string
+	Surname    string
+	Patronymic string
+}
+type Response struct {
+	Time   int64
+	Error  bool
+	ErrMsg string
+}
 
 var url string
 
 func main() {
 	var line string
 
-	port, err := config.GetHTTPPort()
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
+	port := config.GetHTTPPort()
 	url = "http://127.0.0.1" + port
 	in := bufio.NewScanner(os.Stdin)
 
@@ -46,11 +54,14 @@ func main() {
 			listPerson()
 		case "add":
 			addPerson(line)
-		case "asyncAdd":
+		case "put":
+			fallthrough
 		case "update":
+			updatePerson(line)
 		case "get":
 			getPerson(line)
-		case "delete":
+		case "del":
+			delPerson(line)
 		default:
 			fmt.Printf("Unknown command <%s>\n", line)
 		}
@@ -63,24 +74,37 @@ func listPerson() {
 		fmt.Println(err)
 		return
 	}
-	fmt.Println(resp)
+	defer resp.Body.Close()
+	type ListResponse struct {
+		Response
+		Body []*models.Person
+	}
+	var data ListResponse
+	err = json.NewDecoder(resp.Body).Decode(&data)
+	if err != nil {
+		fmt.Println("Json parse error:", err)
+		return
+	}
+	if data.Error {
+		fmt.Println("ERROR", data.ErrMsg)
+	} else {
+		for _, val := range data.Body {
+			fmt.Println(*val)
+		}
+	}
 }
 
 func addPerson(line string) {
 	params := strings.Split(line, " ")
 
-	type Req struct {
-		name    string
-		surname string
-	}
-	var req Req
+	var req ReqPerson
 	switch len(params) {
 	case 3:
-		req.name = params[1]
-		req.surname = params[2]
+		req.Name = params[1]
+		req.Surname = params[2]
 	case 4:
-		req.name = params[1]
-		req.surname = params[2]
+		req.Name = params[1]
+		req.Surname = params[2]
 	default:
 		fmt.Printf("invalid args %d items <%v>", len(params), params)
 		return
@@ -91,13 +115,73 @@ func addPerson(line string) {
 		return
 	}
 	resp, err := http.DefaultClient.Post(url, "text/json", bytes.NewReader(jsonBody))
-
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	fmt.Println(resp)
+	defer resp.Body.Close()
+	type AddRespnose struct {
+		Response
+		Body any
+	}
+	var data AddRespnose
+	err = json.NewDecoder(resp.Body).Decode(&data)
+	if err != nil {
+		fmt.Println("Json parse error:", err)
+		return
+	}
+	if data.Error {
+		fmt.Println("ERROR", data.ErrMsg)
+	} else {
+		fmt.Println("new id:", data.Body)
+	}
+}
+
+func updatePerson(line string) {
+	params := strings.Split(line, " ")
+
+	var reqParam ReqPerson
+	switch len(params) {
+	case 4:
+		reqParam.Name = params[2]
+		reqParam.Surname = params[3]
+	case 5:
+		reqParam.Name = params[2]
+		reqParam.Surname = params[3]
+		reqParam.Patronymic = params[4]
+	default:
+		fmt.Printf("invalid args %d items <%v>", len(params), params)
+		return
+	}
+	jsonBody, err := json.Marshal(reqParam)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	req, err := http.NewRequest(http.MethodPut, url+"/"+params[1], bytes.NewReader(jsonBody))
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+
+	defer resp.Body.Close()
+	var data Response
+	err = json.NewDecoder(resp.Body).Decode(&data)
+	if err != nil {
+		fmt.Println("Json parse error:", err)
+		return
+	}
+	if data.Error {
+		fmt.Println("ERROR", data.ErrMsg)
+	} else {
+		fmt.Println("done")
+	}
 }
 
 func getPerson(line string) {
@@ -112,5 +196,52 @@ func getPerson(line string) {
 		fmt.Println(err)
 		return
 	}
-	fmt.Println(resp)
+	defer resp.Body.Close()
+	type GetRespnose struct {
+		Response
+		Body models.Person
+	}
+	var data GetRespnose
+	err = json.NewDecoder(resp.Body).Decode(&data)
+	if err != nil {
+		fmt.Println("Json parse error:", err)
+		return
+	}
+	if data.Error {
+		fmt.Println("ERROR", data.ErrMsg)
+	} else {
+		fmt.Println(data.Body)
+	}
+}
+
+func delPerson(line string) {
+	params := strings.Split(line, " ")
+	if len(params) != 2 {
+		fmt.Printf("invalid args %d items <%v>", len(params), params)
+		return
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, url+"/"+params[1], nil)
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+	defer resp.Body.Close()
+
+	var data Response
+	err = json.NewDecoder(resp.Body).Decode(&data)
+	if err != nil {
+		fmt.Println("Json parse error:", err)
+		return
+	}
+	if data.Error {
+		fmt.Println("ERROR", data.ErrMsg)
+	} else {
+		fmt.Println("done")
+	}
+
 }

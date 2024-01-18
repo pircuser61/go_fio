@@ -25,18 +25,17 @@ var log *slog.Logger
 
 func RunHttpServer(ctx context.Context, logger *slog.Logger) error {
 	log = logger
-	port, err := config.GetHTTPPort()
-	if err != nil {
-		return err
-	}
+	port := config.GetHTTPPort()
 
 	router := mux.NewRouter()
 	router.HandleFunc("/", PersonList).Methods("GET")
 	router.HandleFunc("/", PersonCreate).Methods("POST")
-	router.HandleFunc("/{id}", PersonGet)
+	router.HandleFunc("/{id}", PersonGet).Methods("GET")
+	router.HandleFunc("/{id}", PersonUpdate).Methods("PUT")
+	router.HandleFunc("/{id}", PersonDelete).Methods("DELETE")
 
 	log.Info("http start", slog.String("port", port))
-	err = http.ListenAndServe(port, router)
+	err := http.ListenAndServe(port, router)
 	if err != nil {
 		log.Error("http exit with error", err)
 	} else {
@@ -53,21 +52,62 @@ func PersonList(rw http.ResponseWriter, req *http.Request) {
 
 func PersonCreate(rw http.ResponseWriter, req *http.Request) {
 	log.Debug("rest: person create")
-	var newPerson models.Person
-	newPerson.Name = "Bob"
-	res, err := srv.PersonCreate(context.Background(), newPerson)
-	makeResp(rw, 0, res, err)
+	defer req.Body.Close()
+	var person models.Person
+	err := json.NewDecoder(req.Body).Decode(&person)
+	if err == nil {
+		log.Debug("rest: params", slog.String("name", person.Name))
+		person.Id, err = srv.PersonCreate(context.Background(), &person)
+	}
+	makeResp(rw, 0, person.Id, err)
 }
 
-func PersonGet(rw http.ResponseWriter, req *http.Request) {
+func PersonUpdate(rw http.ResponseWriter, req *http.Request) {
+	log.Debug("rest: person update")
+	defer req.Body.Close()
+	var person models.Person
 	vars := mux.Vars(req)
 	strId := vars["id"]
 	id, err := strconv.ParseUint(strId, 10, 32)
-	var res models.Person
+	if err != nil {
+		makeResp(rw, 0, nil, err)
+		return
+	}
+
+	err = json.NewDecoder(req.Body).Decode(&person)
+	if err != nil {
+		makeResp(rw, 0, nil, err)
+		return
+	}
+
+	person.Id = uint32(id)
+	log.Debug("rest: params", slog.Uint64("Id", id), slog.String("name", person.Name))
+	err = srv.PersonUpdate(context.Background(), &person)
+
+	makeResp(rw, 0, nil, err)
+}
+
+func PersonGet(rw http.ResponseWriter, req *http.Request) {
+	log.Debug("rest: person get")
+	var res *models.Person
+	vars := mux.Vars(req)
+	strId := vars["id"]
+	id, err := strconv.ParseUint(strId, 10, 32)
 	if err == nil {
 		res, err = srv.PersonGet(context.Background(), uint32(id))
 	}
 	makeResp(rw, 0, res, err)
+}
+
+func PersonDelete(rw http.ResponseWriter, req *http.Request) {
+	log.Debug("rest: person delete")
+	vars := mux.Vars(req)
+	strId := vars["id"]
+	id, err := strconv.ParseUint(strId, 10, 32)
+	if err == nil {
+		err = srv.PersonDelete(context.Background(), uint32(id))
+	}
+	makeResp(rw, 0, nil, err)
 }
 
 func makeResp(rw http.ResponseWriter, tm int64, body any, err error) {
