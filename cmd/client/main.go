@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 
@@ -24,13 +25,13 @@ type Response struct {
 	ErrMsg string
 }
 
-var url string
+var sUrl string
 
 func main() {
 	var line string
 
 	port := config.GetHTTPPort()
-	url = "http://127.0.0.1" + port
+	sUrl = "http://127.0.0.1" + port
 	in := bufio.NewScanner(os.Stdin)
 
 	for {
@@ -51,7 +52,7 @@ func main() {
 			return
 
 		case "list":
-			listPerson()
+			listPerson(line)
 		case "add":
 			addPerson(line)
 		case "put":
@@ -68,8 +69,21 @@ func main() {
 	}
 }
 
-func listPerson() {
-	resp, err := http.DefaultClient.Get(url)
+func listPerson(line string) {
+
+	base, err := url.Parse(sUrl)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	params := strings.Split(line, " ")
+	reqParams := url.Values{}
+	for i := 3; i <= len(params); i += 2 {
+		reqParams.Add(params[i-2], params[i-1])
+	}
+	base.RawQuery = reqParams.Encode()
+	fmt.Println(base.String())
+	resp, err := http.DefaultClient.Get(base.String())
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -105,6 +119,7 @@ func addPerson(line string) {
 	case 4:
 		req.Name = params[1]
 		req.Surname = params[2]
+		req.Patronymic = params[3]
 	default:
 		fmt.Printf("invalid args %d items <%v>", len(params), params)
 		return
@@ -114,7 +129,7 @@ func addPerson(line string) {
 		fmt.Println(err)
 		return
 	}
-	resp, err := http.DefaultClient.Post(url, "text/json", bytes.NewReader(jsonBody))
+	resp, err := http.DefaultClient.Post(sUrl, "text/json", bytes.NewReader(jsonBody))
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -160,14 +175,16 @@ func updatePerson(line string) {
 		return
 	}
 
-	req, err := http.NewRequest(http.MethodPut, url+"/"+params[1], bytes.NewReader(jsonBody))
+	req, err := http.NewRequest(http.MethodPut, sUrl+"/"+params[1], bytes.NewReader(jsonBody))
 	if err != nil {
 		fmt.Println(err.Error())
+		return
 	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		fmt.Println(err.Error())
+		fmt.Println("Request error", err.Error())
+		return
 	}
 
 	defer resp.Body.Close()
@@ -191,7 +208,7 @@ func getPerson(line string) {
 		return
 	}
 
-	resp, err := http.DefaultClient.Get(url + "/" + params[1])
+	resp, err := http.DefaultClient.Get(sUrl + "/" + params[1])
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -221,7 +238,7 @@ func delPerson(line string) {
 		return
 	}
 
-	req, err := http.NewRequest(http.MethodDelete, url+"/"+params[1], nil)
+	req, err := http.NewRequest(http.MethodDelete, sUrl+"/"+params[1], nil)
 	if err != nil {
 		fmt.Println(err.Error())
 	}

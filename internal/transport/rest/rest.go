@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/gorilla/mux"
+	"github.com/gorilla/schema"
 
 	config "github.com/pircuser61/go_fio/config"
 	"github.com/pircuser61/go_fio/internal/models"
@@ -45,45 +46,51 @@ func RunHttpServer(ctx context.Context, logger *slog.Logger) error {
 }
 
 func PersonList(rw http.ResponseWriter, req *http.Request) {
-	log.Debug("rest: person list")
-	res, err := srv.PersonList(context.Background())
-	makeResp(rw, 0, res, err)
+
+	var filter models.Filter
+	decoder := schema.NewDecoder()
+	err := decoder.Decode(&filter, req.URL.Query())
+	if err != nil {
+		log.Debug("rest: person list params error", slog.String("msg", err.Error()))
+		makeResp(rw, 0, nil, err)
+	} else {
+		log.Debug("rest: person list", slog.Any("params", filter))
+		res, err := srv.PersonList(context.Background(), &filter)
+		makeResp(rw, 0, res, err)
+	}
 }
 
 func PersonCreate(rw http.ResponseWriter, req *http.Request) {
-	log.Debug("rest: person create")
 	defer req.Body.Close()
 	var person models.Person
 	err := json.NewDecoder(req.Body).Decode(&person)
 	if err == nil {
-		log.Debug("rest: params", slog.String("name", person.Name))
+		log.Debug("rest: person create", slog.Any("params", person))
 		person.Id, err = srv.PersonCreate(context.Background(), &person)
+	} else {
+		log.Error("rest: person create param", slog.String("msg", err.Error()))
 	}
 	makeResp(rw, 0, person.Id, err)
 }
 
 func PersonUpdate(rw http.ResponseWriter, req *http.Request) {
-	log.Debug("rest: person update")
 	defer req.Body.Close()
 	var person models.Person
-	vars := mux.Vars(req)
-	strId := vars["id"]
-	id, err := strconv.ParseUint(strId, 10, 32)
-	if err != nil {
-		makeResp(rw, 0, nil, err)
-		return
+	err := json.NewDecoder(req.Body).Decode(&person)
+
+	if err == nil {
+		vars := mux.Vars(req)
+		strId := vars["id"]
+		var id64 uint64
+		id64, err = strconv.ParseUint(strId, 10, 32)
+		person.Id = uint32(id64)
 	}
-
-	err = json.NewDecoder(req.Body).Decode(&person)
-	if err != nil {
-		makeResp(rw, 0, nil, err)
-		return
+	if err == nil {
+		log.Debug("rest: person update", slog.Any("params", person))
+		err = srv.PersonUpdate(context.Background(), &person)
+	} else {
+		log.Error("rest: person update param", slog.String("msg", err.Error()))
 	}
-
-	person.Id = uint32(id)
-	log.Debug("rest: params", slog.Uint64("Id", id), slog.String("name", person.Name))
-	err = srv.PersonUpdate(context.Background(), &person)
-
 	makeResp(rw, 0, nil, err)
 }
 

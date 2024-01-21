@@ -4,8 +4,7 @@ import (
 	"context"
 	"log/slog"
 
-	//"github.com/georgysavva/scany/pgxscan"
-	//"github.com/jackc/pgx/v4"
+	sq "github.com/Masterminds/squirrel"
 	"github.com/georgysavva/scany/pgxscan"
 	"github.com/jackc/pgx/v4/pgxpool"
 	_ "github.com/lib/pq"
@@ -102,12 +101,56 @@ func (i PostgresStore) PersonDelete(ctx context.Context, id uint32) error {
 	return nil
 }
 
-func (i PostgresStore) PersonList(ctx context.Context) ([]*models.Person, error) {
+func (i PostgresStore) PersonList(ctx context.Context, filter *models.Filter) ([]*models.Person, error) {
 	i.log.Debug("postgres: list person")
-	const queryList = "SELECT * FROM person"
+	//const queryList = "SELECT * FROM person"
+	if filter.Limit <= 0 || filter.Limit > 20 {
+		filter.Limit = 20
+	}
+	sql := sq.Select("*").From("person").
+		Limit(filter.Limit).PlaceholderFormat(sq.Dollar)
 
+	if filter.Offset > 0 {
+		sql = sql.Offset(filter.Offset)
+	}
+	if filter.Age > 0 {
+		sql = sql.Where(sq.Eq{"age": filter.Age})
+	}
+
+	if filter.Gender != "" {
+		sql = sql.Where(sq.Eq{"gender": filter.Gender})
+	}
+
+	switch filter.Order {
+	case "id":
+		sql = sql.OrderBy("id")
+	case "-id":
+		sql = sql.OrderBy("id DESC")
+	case "name":
+		sql = sql.OrderBy("name")
+	case "-name":
+		sql = sql.OrderBy("name DESC")
+	case "age":
+		sql = sql.OrderBy("age")
+	case "-age":
+		sql = sql.OrderBy("age DESC")
+	case "gender":
+		sql = sql.OrderBy("gender")
+	case "-gender":
+		sql = sql.OrderBy("gender DESC")
+	case "nation":
+		sql = sql.OrderBy("nationality")
+	case "-nation":
+		sql = sql.OrderBy("nationality DESC")
+	}
+	queryList, args, err := sql.ToSql()
+	if err != nil {
+		return nil, err
+	}
+	i.log.Debug("postgres: list", slog.String("query", queryList))
+	i.log.Debug("postgres: list", slog.Any("args", args))
 	var list []*models.Person
-	if err := pgxscan.Select(ctx, i.pool, &list, queryList); err != nil {
+	if err := pgxscan.Select(ctx, i.pool, &list, queryList, args...); err != nil {
 		i.log.Debug("postgres:  ERROR!", slog.String("msg", err.Error()))
 		return nil, err
 	}

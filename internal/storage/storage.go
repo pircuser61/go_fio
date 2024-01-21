@@ -18,6 +18,6 @@ type Store interface {
 	PersonGet(context.Context, uint32) (*models.Person, error)
 	PersonUpdate(context.Context, *models.Person) error
 	PersonDelete(context.Context, uint32) error
-	PersonList(context.Context) ([]*models.Person, error)
+	PersonList(context.Context, *models.Filter) ([]*models.Person, error)
 	Release()
 }
